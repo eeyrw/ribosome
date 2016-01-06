@@ -313,7 +313,10 @@ parser = argparse.ArgumentParser(
     prog="ribosome code generator, version 1.16",
     usage="%(prog)s [options] <dna_file> [-- <arguments-to-dna>*]")
 parser.add_argument('dna', type=argparse.FileType('r'))
-parser.add_argument('--rna', action='store_true')
+group = parser.add_mutually_exclusive_group()
+group.add_argument('--rna', action='store_true')
+group.add_argument('--throw-exception', action='store_true')
+
 
 # Pwd
 __dir__ = os.path.dirname(os.path.realpath(__file__))
@@ -358,7 +361,7 @@ else:
 
 # Generate RNA Prologue code
 rnawrite(PROLOGUE)
-if not args.rna:
+if not args.rna and not args.throw_exception:
     rnawrite('try:\n')
 
 # Process the DNA file.
@@ -393,7 +396,7 @@ while True:
     # Lets save the left and right spaces, if any
     lspace = line.replace(line.lstrip(), '')
     # Add 4 spaces to accommodate our try except clause if not rna
-    if not args.rna:
+    if not args.rna and not args.throw_exception:
         lspace = lspace + ' ' * 4
     rspace = line.replace(line.rstrip(), '')
     # followed by stripping the line
@@ -482,7 +485,7 @@ while True:
 # Generate RNA epilogue code.
 dnastack = [[None, 'ribosome', __line__() + 1]]
 rna.write('\n')
-if not args.rna:
+if not args.rna and not args.throw_exception:
     rna.write('except Exception as e:\n')
     rna.write('    LINEMAP = [\n')
     last = None
@@ -506,7 +509,16 @@ rna.close()
 if not args.rna:
     import subprocess
     # Execute the RNA file. Pass it any arguments not used by ribosome.
-    subprocess.call([sys.executable, rnafile] + unknown)
+    pipes = subprocess.Popen(['python', rnafile] + unknown, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = pipes.communicate()
+
+    # Print generated RNA file contents 
+    sys.stdout.write(stdout.decode('utf-8'))
     # Delete the RNA file.
     os.remove(rnafile)
+
+    # If there was an error in the RNA file, print the error and exit with a non-zero status
+    if args.throw_exception and stderr is not None and len(stderr) > 0:
+        sys.stderr.write(stderr.decode('utf-8'))
+        sys.exit(1)
 
